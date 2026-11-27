@@ -3,7 +3,7 @@ import time
 import duckdb
 from fastapi import FastAPI, HTTPException, Query
 
-# Vercel mein writable directory sirf /tmp hoti hai
+# Vercel ke liye writable directory
 os.makedirs("/tmp/duckdb_ext", exist_ok=True)
 
 app = FastAPI(title="NumFindr API")
@@ -11,36 +11,39 @@ app = FastAPI(title="NumFindr API")
 # DuckDB connection setup
 con = duckdb.connect(database=":memory:")
 
-# Vercel ke liye zaroori settings
+# Vercel fix
 con.execute("SET home_directory='/tmp';")
 con.execute("SET extension_directory='/tmp/duckdb_ext';")
 
-# httpfs extension load karo (hf:// protocol ke liye)
+# httpfs extension load karo
 con.execute("INSTALL httpfs;")
 con.execute("LOAD httpfs;")
 
-con.execute("PRAGMA threads=2;")
-con.execute("PRAGMA memory_limit='1GB';")
+# 🚀 SPEED SETTINGS (Naya Code)
+con.execute("SET threads=4;")             # 4 threads use karega
+con.execute("PRAGMA memory_limit='2GB';") # 2GB memory de rahe hain
+con.execute("SET http_timeout=120000;")   # Network timeout 120 sec kar diya
 
-# Hugging Face path
 PARQUET_PATH = "hf://datasets/Bruhletme/Lxfarari/users_data.parquet"
 
-def run_search(mobile: str):
+def run_search(search_term: str):
     t0 = time.time()
-    clean = mobile.strip()
+    clean = search_term.strip()
     
-    if not clean.isdigit() or len(clean) > 10:
-        raise HTTPException(status_code=400, detail="Invalid mobile number")
+    if not clean.isdigit() or len(clean) > 12: # Aadhar ke liye 12 digits tak allow kiya
+        raise HTTPException(status_code=400, detail="Invalid number")
     
+    # 🚀 Dono mobile aur id (Aadhar) se search karne ke liye query update ki
     query = f"""
         SELECT mobile, name, fname, address, alt, circle, id, email
         FROM read_parquet('{PARQUET_PATH}')
-        WHERE CAST(mobile AS VARCHAR) = ?
+        WHERE CAST(mobile AS VARCHAR) = ? OR CAST(id AS VARCHAR) = ?
         LIMIT 1
     """
     
     try:
-        rows = con.execute(query, [clean]).fetchall()
+        # Dono jagah same number pass kar rahe hain
+        rows = con.execute(query, [clean, clean]).fetchall()
         col_names = [desc[0] for desc in con.description] if con.description else []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
@@ -68,8 +71,8 @@ def home():
     }
 
 @app.get("/search")
-def search_query(mobile: str = Query(..., description="10 digit mobile number")):
-    return run_search(mobile)
+def search_query(q: str = Query(..., description="Mobile or Aadhar number")):
+    return run_search(q)
 
 @app.get("/search/{mobile}")
 def search_path(mobile: str):
