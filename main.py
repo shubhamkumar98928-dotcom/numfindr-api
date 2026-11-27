@@ -3,7 +3,7 @@ import time
 import duckdb
 from fastapi import FastAPI, HTTPException, Query
 
-# Vercel ke liye writable directory
+# Vercel mein writable directory sirf /tmp hoti hai
 os.makedirs("/tmp/duckdb_ext", exist_ok=True)
 
 app = FastAPI(title="NumFindr API")
@@ -11,18 +11,17 @@ app = FastAPI(title="NumFindr API")
 # DuckDB connection setup
 con = duckdb.connect(database=":memory:")
 
-# Vercel fix
+# 🛠️ Vercel Fixes
 con.execute("SET home_directory='/tmp';")
 con.execute("SET extension_directory='/tmp/duckdb_ext';")
 
-# httpfs extension load karo
+# httpfs extension explicitly load karo
 con.execute("INSTALL httpfs;")
 con.execute("LOAD httpfs;")
 
-# 🚀 SPEED SETTINGS (Naya Code)
-con.execute("SET threads=4;")             # 4 threads use karega
-con.execute("PRAGMA memory_limit='2GB';") # 2GB memory de rahe hain
-con.execute("SET http_timeout=120000;")   # Network timeout 120 sec kar diya
+# 🚀 Speed & Memory Settings
+con.execute("SET threads=2;")             # Vercel free tier ke liye safe
+con.execute("PRAGMA memory_limit='1GB';") # Crash rokne ke liye 1GB
 
 PARQUET_PATH = "hf://datasets/Bruhletme/Lxfarari/users_data.parquet"
 
@@ -30,10 +29,11 @@ def run_search(search_term: str):
     t0 = time.time()
     clean = search_term.strip()
     
-    if not clean.isdigit() or len(clean) > 12: # Aadhar ke liye 12 digits tak allow kiya
+    # Mobile (10) ya Aadhar (12) ke liye validation
+    if not clean.isdigit() or len(clean) > 12:
         raise HTTPException(status_code=400, detail="Invalid number")
     
-    # 🚀 Dono mobile aur id (Aadhar) se search karne ke liye query update ki
+    # Query: Mobile ya ID dono se search karega
     query = f"""
         SELECT mobile, name, fname, address, alt, circle, id, email
         FROM read_parquet('{PARQUET_PATH}')
@@ -42,7 +42,6 @@ def run_search(search_term: str):
     """
     
     try:
-        # Dono jagah same number pass kar rahe hain
         rows = con.execute(query, [clean, clean]).fetchall()
         col_names = [desc[0] for desc in con.description] if con.description else []
     except Exception as e:
