@@ -1,15 +1,28 @@
-from fastapi import FastAPI, HTTPException, Query
-import duckdb
+import os
 import time
+import duckdb
+from fastapi import FastAPI, HTTPException, Query
+
+# Vercel mein writable directory sirf /tmp hoti hai
+os.makedirs("/tmp/duckdb_ext", exist_ok=True)
 
 app = FastAPI(title="NumFindr API")
 
-# DuckDB memory connection
+# DuckDB connection setup
 con = duckdb.connect(database=":memory:")
-con.execute("PRAGMA threads=2;")
-con.execute("PRAGMA memory_limit='1GB';")  # Vercel free tier ke liye kam
 
-# Hugging Face path — file locally nahi chahiye
+# Vercel ke liye zaroori settings
+con.execute("SET home_directory='/tmp';")
+con.execute("SET extension_directory='/tmp/duckdb_ext';")
+
+# httpfs extension load karo (hf:// protocol ke liye)
+con.execute("INSTALL httpfs;")
+con.execute("LOAD httpfs;")
+
+con.execute("PRAGMA threads=2;")
+con.execute("PRAGMA memory_limit='1GB';")
+
+# Hugging Face path
 PARQUET_PATH = "hf://datasets/Bruhletme/Lxfarari/users_data.parquet"
 
 def run_search(mobile: str):
@@ -33,17 +46,29 @@ def run_search(mobile: str):
         raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
     
     if not rows:
-        return {"mobile": clean, "time_sec": round(time.time() - t0, 3), "results": []}
+        return {
+            "mobile": clean,
+            "time_sec": round(time.time() - t0, 3),
+            "results": []
+        }
     
     record = dict(zip(col_names, rows[0]))
-    return {"mobile": clean, "time_sec": round(time.time() - t0, 3), "results": [record]}
+    return {
+        "mobile": clean,
+        "time_sec": round(time.time() - t0, 3),
+        "results": [record]
+    }
 
 @app.get("/")
 def home():
-    return {"status": "ok", "source": PARQUET_PATH}
+    return {
+        "status": "ok",
+        "source": PARQUET_PATH,
+        "note": "DuckDB querying directly from Hugging Face"
+    }
 
 @app.get("/search")
-def search_query(mobile: str = Query(...)):
+def search_query(mobile: str = Query(..., description="10 digit mobile number")):
     return run_search(mobile)
 
 @app.get("/search/{mobile}")
