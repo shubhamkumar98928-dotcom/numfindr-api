@@ -1,8 +1,7 @@
 {
   "functions": {
     "main.py": {
-      "maxDuration": 300,
-      "memory": 1024
+      "maxDuration": 300
     }
   }
 }
