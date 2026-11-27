@@ -11,18 +11,18 @@ app = FastAPI(title="NumFindr API")
 # DuckDB connection setup
 con = duckdb.connect(database=":memory:")
 
-# Vercel ke liye zaroori settings
+# 🛠️ Vercel Fixes
 con.execute("SET home_directory='/tmp';")
 con.execute("SET extension_directory='/tmp/duckdb_ext';")
 
-# httpfs extension load karo (hf:// protocol ke liye)
+# httpfs extension load karo (HuggingFace ke liye zaroori)
 con.execute("INSTALL httpfs;")
 con.execute("LOAD httpfs;")
 
-con.execute("PRAGMA threads=2;")
-con.execute("PRAGMA memory_limit='1GB';")
+# 🚀 Speed Settings (Thoda fast karne ke liye)
+con.execute("PRAGMA threads=8;")             # 4 se badha kar 8 kiya
+con.execute("PRAGMA memory_limit='2GB';")    # 1GB se badha kar 2GB kiya
 
-# Hugging Face path
 PARQUET_PATH = "hf://datasets/Bruhletme/Lxfarari/users_data.parquet"
 
 def run_search(mobile: str):
@@ -32,6 +32,7 @@ def run_search(mobile: str):
     if not clean.isdigit() or len(clean) > 10:
         raise HTTPException(status_code=400, detail="Invalid mobile number")
     
+    # Sirf mobile se search (jo pehle chal raha tha)
     query = f"""
         SELECT mobile, name, fname, address, alt, circle, id, email
         FROM read_parquet('{PARQUET_PATH}')
